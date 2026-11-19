@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>A Grande Fuga de Luís XVI</title>
+<style>
+:root{--gold:#f4cc75;--paper:#f4e8c9;--navy:#20283b;--red:#a83d3a}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(ellipse at 50% 10%,#48516b,#202638 60%,#101521);color:var(--paper);font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.shell{width:min(100%,1060px)}
+header{display:flex;justify-content:space-between;align-items:end;gap:16px;margin-bottom:14px}
+h1{margin:0;color:var(--gold);font-size:clamp(23px,4vw,40px);letter-spacing:-2px;text-shadow:3px 3px #642b30}
+.subtitle{margin:7px 0 0;color:#d0c8b7;font-size:12px}
+.edition{border:1px solid #9b8969;padding:8px 11px;font-size:11px;color:#f0dba9;white-space:nowrap}
+.frame{position:relative;border:4px solid #dfc58b;box-shadow:0 0 0 4px #55433e,0 18px 55px #000a;background:#b7d0c9}
+canvas{width:100%;display:block;aspect-ratio:16/7;image-rendering:pixelated}
+.hud{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:10px 14px;background:#252d40;border:1px solid #665b4d;border-top:0;font-size:12px}
+.hud strong{color:var(--gold)}
+.actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
+.keys{display:flex;gap:8px;flex-wrap:wrap;color:#d6d0c2;font-size:11px}
+kbd{padding:5px 8px;border:1px solid #8c8069;border-bottom-width:3px;border-radius:4px;background:#30384a;color:#fff0c8}
+button{border:0;padding:11px 16px;background:var(--gold);color:#292018;font:700 12px ui-monospace,monospace;cursor:pointer;box-shadow:0 3px #9c703c}
+button:hover{filter:brightness(1.1);transform:translateY(-1px)}
+button.secondary{background:#3a455d;color:#fff0cf;box-shadow:0 3px #171d2a;border:1px solid #8b806a}
+.note{text-align:center;color:#9099a7;font-size:10px;margin:14px 0 0}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:#172033bd;padding:16px;text-align:center}
+.panel{max-width:600px;padding:clamp(14px,3vw,28px);border:2px solid #e4c77e;background:#222b40ed;box-shadow:7px 7px #141a29}
+.panel .crown{font-size:34px;margin-bottom:4px}
+.panel h2{color:var(--gold);font-size:clamp(19px,3vw,30px);margin:5px 0 10px;text-shadow:2px 2px #6a3031}
+.panel p{font-size:12px;line-height:1.7;color:#eee4cd;margin:8px 0 16px}
+.panel .small{font-size:10px;color:#c1b9a9}
+.panel button{margin:4px}
+.hidden{display:none}
+@media(max-width:620px){
+ body{padding:12px;align-content:center}
+ header{align-items:start;flex-direction:column}
+ .edition{display:none}
+ canvas{aspect-ratio:4/3}
+ .hud{font-size:10px}
+ .actions{align-items:flex-start;flex-direction:column}
+ .actions button{width:100%}
+ .panel p{font-size:11px}
+}
+</style>
+</head>
+<body>
+<main class="shell">
+<header>
+ <div><h1>A GRANDE FUGA DE LUÍS XVI</h1><p class="subtitle">Paris, 1789 — a monarquia está correndo perigo!</p></div>
+ <div class="edition">ARCADE REVOLUCIONÁRIO · 8-BIT</div>
+</header>
+<div class="frame">
+ <canvas id="game" width="960" height="420" aria-label="Jogo de corrida de Luís XVI"></canvas>
+ <div class="overlay" id="overlay">
+  <div class="panel">
+   <div class="crown">👑</div>
+   <h2 id="overlayTitle">A COROA ESTÁ EM PERIGO!</h2>
+   <p id="overlayText">A população está nas ruas e as foices estão por toda parte. Ajude Luís XVI a fugir antes que a Revolução o alcance!</p>
+   <button id="play">COMEÇAR A FUGA</button>
+   <button class="secondary" id="sound">♫ SOM: LIGADO</button>
+   <p class="small">ESPAÇO / ↑ para pular · ↓ para abaixar · no celular, toque para pular</p>
+  </div>
+ </div>
+</div>
+<div class="hud">
+ <span>DISTÂNCIA: <strong id="score">00000</strong> m</span>
+ <span>RECORDE: <strong id="best">00000</strong> m</span>
+ <span id="status">AGUARDANDO SUA MAJESTADE</span>
+</div>
+<div class="actions">
+ <div class="keys"><span><kbd>ESPAÇO</kbd> <kbd>↑</kbd> pular</span><span><kbd>↓</kbd> abaixar</span><span><kbd>ENTER</kbd> iniciar</span></div>
+ <button class="secondary" id="restart">REINICIAR PARTIDA</button>
+</div>
+<p class="note">Um jogo de humor inspirado no Dino Game. Nenhuma monarquia foi salva durante o desenvolvimento.</p>
+</main>
+<script>
+(()=>{
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const $=id=>document.getElementById(id);
+const W=960,H=420,G=340;
+let state='ready',score=0,best=Number(localStorage.getItem('luisXVI_recorde')||0),speed=5.2,frame=0,spawn=80;
+let obstacles=[],particles=[],last=0,soundOn=true,audio=null,musicTimer=null,musicStep=0;
+const player={x:135,y:G-66,vy:0,duck:false};
+$('best').textContent=String(best).padStart(5,'0');
+const quips=['A monarquia está em queda livre!','O povo não está para brincadeira!','Liberdade, igualdade... CORRIDA!','Sua majestade precisa de um plano B!','A Bastilha ficou para trás!','Que falta faz uma carruagem!'];
+const endLines=['A revolução venceu esta rodada!','O povo pediu bis — e você tropeçou.','A monarquia entrou em modo avião.','Luís XVI descobriu que não era imortal.','Fim da linha para a realeza!'];
+function audioCtx(){if(!audio){const A=window.AudioContext||window.webkitAudioContext;if(A)audio=new A()}if(audio?.state==='suspended')audio.resume();return audio}
+function tone(freq,dur=.1,type='square',vol=.045,slide=0){
+ if(!soundOn)return;const a=audioCtx();if(!a)return;
+ const o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.setValueAtTime(freq,a.currentTime);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(40,freq+slide),a.currentTime+dur);
+ g.gain.setValueAtTime(vol,a.currentTime);g.gain.exponentialRampToValueAtTime(.001,a.currentTime+dur);
+ o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+dur);
+}
+function sfx(kind){
+ if(kind==='jump'){tone(420,.09,'square',.05,360);setTimeout(()=>tone(690,.08,'square',.035),55)}
+ if(kind==='hit'){tone(180,.28,'sawtooth',.07,-115);tone(95,.38,'triangle',.05,-45)}
+ if(kind==='record'){[523,659,784,1046].forEach((n,i)=>setTimeout(()=>tone(n,.14,'square',.04),i*100))}
+ if(kind==='start'){tone(330,.08);setTimeout(()=>tone(494,.1),90);setTimeout(()=>tone(659,.13),180)}
+}
+function startMusic(){
+ if(!soundOn||musicTimer)return;
+ const notes=[262,330,392,330,294,349,440,392,262,330,392,523,440,392,330,294];
+ musicTimer=setInterval(()=>{if(state==='running'){tone(notes[musicStep%notes.length],.105,'square',.018);if(musicStep%4===0)tone(131,.12,'triangle',.014);musicStep++}},185);
+}
+function stopMusic(){if(musicTimer){clearInterval(musicTimer);musicTimer=null}}
+function rect(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,h)}
+function txt(t,x,y,size,c='#292d39',align='left'){ctx.fillStyle=c;ctx.font=`bold ${size}px monospace`;ctx.textAlign=align;ctx.fillText(t,x,y)}
+function bg(){
+ rect(0,0,W,H,'#b9d1c9');
+ // céu e nuvens
+ for(let i=0;i<5;i++){let x=(i*245-frame*.55)%(W+80);if(x<0)x+=W+80;rect(x,55,52,7,'#e8e8d5');rect(x+12,48,28,7,'#e8e8d5')}
+ // Paris ao fundo
+ rect(0,240,W,100,'#91aaa5');
+ for(let i=0;i<9;i++){let x=i*135-(frame*.32%135);rect(x,190,67,150,'#819895');rect(x+10,169,47,22,'#819895');rect(x+26,145,16,24,'#819895');rect(x+17,218,10,14,'#d5d1b6');rect(x+43,218,10,14,'#d5d1b6')}
+ // torre e telhados
+ let tx=690-(frame*.18%1080);rect(tx,135,9,105,'#718783');rect(tx-8,153,25,8,'#718783');rect(tx-3,115,15,22,'#718783');rect(tx+2,99,5,16,'#718783');
+ // bandeirinhas
+ for(let i=0;i<5;i++){let x=(i*230-frame*.8)%(W+50);if(x<0)x+=W+50;rect(x,105,3,50,'#715e4c');rect(x-9,109,22,18,'#eee0bc');rect(x-5,114,14,8,'#a83d3a')}
+ rect(0,G,W,H-G,'#c6aa7e');rect(0,G,W,7,'#665747');
+ for(let i=0;i<38;i++){let x=(i*31-frame*speed*1.25)%(W+30);if(x<0)x+=W+30;rect(x,G+24+(i%4)*17,13,3,'#a58a63')}
+ // placas ocasionais
+ if(Math.floor(frame/400)%2===1){rect(790,267,120,35,'#e8d9b6');txt('VIVE LA...',850,290,13,'#9f3d39','center')}
+}
+function king(x,y,duck=false){
+ const top=y+(duck?23:0);
+ // corridinha de pernas
+ const swing=Math.sin(frame*.38)>0?3:0;
+ rect(x+4,G-3,42,5,'#806b52');
+ if(!duck){rect(x+10,top+48+swing,9,15-swing,'#293b57');rect(x+27,top+48-swing,9,15+swing,'#293b57');rect(x+8,top+61,13,5,'#eee0c5');rect(x+26,top+61,13,5,'#eee0c5')}
+ else{rect(x+8,top+35,31,9,'#293b57');rect(x+34,top+37,12,7,'#eee0c5')}
+ rect(x+7,top+26,31,25,'#263e68');rect(x+3,top+31,8,17,'#263e68');rect(x+20,top+28,5,21,'#f1d28b');rect(x+13,top+33,4,4,'#f1d28b');rect(x+29,top+33,4,4,'#f1d28b');
+ rect(x+13,top+8,25,22,'#edc49c');rect(x+10,top+5,30,9,'#f0e6d4');rect(x+12,top+2,25,7,'#fff5df');
+ rect(x+16,top+14,3,3,'#30313b');rect(x+29,top+14,3,3,'#30313b');rect(x+21,top+23,10,3,'#8e4e46');
+ rect(x+11,top+17,5,11,'#e9dfce');rect(x+35,top+17,5,11,'#e9dfce');
+ rect(x+15,top-4,23,6,'#d8a83f');rect(x+17,top-9,4,6,'#d8a83f');rect(x+25,top-12,4,9,'#d8a83f');rect(x+33,top-8,4,5,'#d8a83f');
+}
+function scythe(o){
+ ctx.save();ctx.translate(o.x,o.y);
+ ctx.strokeStyle='#4a4850';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(24,62);ctx.lineTo(37,5);ctx.stroke();
+ ctx.strokeStyle='#e0e4e3';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(37,7);ctx.quadraticCurveTo(12,-9,-8,12);ctx.quadraticCurveTo(13,1,31,20);ctx.stroke();
+ rect(15,53,18,6,'#76513c');ctx.restore();
+}
+function draw(){
+ bg();obstacles.forEach(scythe);king(player.x,player.y,player.duck);
+ particles.forEach(p=>rect(p.x,p.y,4,4,p.c));
+ if(state==='running'&&score>0&&Math.floor(score)%180===0&&frame%110===0){/* keep playfield clean */}
+}
+function reset(){
+ score=0;speed=5.2;frame=0;spawn=70;obstacles=[];particles=[];player.y=G-66;player.vy=0;player.duck=false;state='running';
+ $('overlay').classList.add('hidden');$('status').textContent='FUJA, MAJESTADE!';
+ $('play').textContent='CONTINUAR A FUGA';sfx('start');startMusic();
+}
+function jump(){
+ if(state!=='running'){reset();return}
+ if(player.y>=G-66&&!player.duck){player.vy=-14.8;sfx('jump');for(let i=0;i<4;i++)particles.push({x:player.x+10+i*5,y:G-8,c:'#9a805b'})}
+}
+function finish(){
+ state='over';stopMusic();sfx('hit');
+ const old=best;best=Math.max(best,Math.floor(score));localStorage.setItem('luisXVI_recorde',best);
+ $('best').textContent=String(best).padStart(5,'0');$('status').textContent='A REVOLUÇÃO VENCEU';
+ $('overlayTitle').textContent=endLines[Math.floor(Math.random()*endLines.length)];
+ $('overlayText').textContent=`Você correu ${Math.floor(score)} metros. ${best>old?'NOVO RECORDE! A história vai se lembrar desta fuga.':quips[Math.floor(Math.random()*quips.length)]}`;
+ $('play').textContent='TENTAR NOVAMENTE';$('overlay').classList.remove('hidden');
+ if(best>old)sfx('record');
+}
+function update(){
+ if(state!=='running')return;
+ frame++;score+=speed*.085;speed=Math.min(11.7,5.2+score/430);
+ player.vy+=.72;player.y+=player.vy;if(player.y>G-66){player.y=G-66;player.vy=0}
+ if(frame>spawn){obstacles.push({x:W+20,y:G-69});spawn=Math.max(44,Math.random()*65+75-speed*2)}
+ obstacles.forEach(o=>o.x-=speed);obstacles=obstacles.filter(o=>o.x>-70);
+ if(frame%7===0)particles.push({x:player.x+8,y:G-5+Math.random()*7,c:'#8c7658'});
+ particles.forEach(p=>p.x-=speed+1);particles=particles.filter(p=>p.x>-5);
+ const px=player.x+7,py=player.duck?player.y+27:player.y+5,pw=30,ph=player.duck?35:55;
+ for(const o of obstacles){if(px<o.x+30&&px+pw>o.x+8&&py<o.y+62&&py+ph>o.y+9){finish();break}}
+ $('score').textContent=String(Math.floor(score)).padStart(5,'0');
+ if(frame%480===0)$('status').textContent=quips[Math.floor(Math.random()*quips.length)].toUpperCase();
+}
+function loop(t){let dt=Math.min(32,t-last);last=t;if(state==='running'){let n=Math.max(1,Math.round(dt/16));for(let i=0;i<n;i++)update()}draw();requestAnimationFrame(loop)}
+function duck(v){player.duck=v&&player.y>=G-66}
+$('play').addEventListener('click',()=>{audioCtx();reset()});
+$('restart').addEventListener('click',()=>{audioCtx();reset()});
+$('sound').addEventListener('click',()=>{
+ soundOn=!soundOn;$('sound').textContent='♫ SOM: '+(soundOn?'LIGADO':'DESLIGADO');
+ if(soundOn){audioCtx();startMusic()}else stopMusic();
+});
+window.addEventListener('keydown',e=>{
+ if(['Space','ArrowUp','ArrowDown','Enter'].includes(e.code))e.preventDefault();
+ if((e.code==='Space'||e.code==='ArrowUp')&&!e.repeat){audioCtx();jump()}
+ if(e.code==='ArrowDown')duck(true);
+ if(e.code==='Enter'&&state!=='running'){audioCtx();reset()}
+});
+window.addEventListener('keyup',e=>{if(e.code==='ArrowDown')duck(false)});
+canvas.addEventListener('pointerdown',e=>{e.preventDefault();audioCtx();jump()});
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
